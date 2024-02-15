@@ -1,0 +1,175 @@
+# 工作流的名称
+name: LotteryResult
+
+# 工作流运行的名称
+run-name: ${{ github.workflow }} ${{ github.sha }}
+
+# 指定此工作流的触发器
+on:
+  schedule:
+    - cron: "*/30 * * * *" # 每30分钟自动执行一次
+  workflow_dispatch: # 可以手动执行
+
+jobs:
+  # 同步上游分支
+  SyncFork:
+    name: SyncFork
+
+    # 在最新版的Ubuntu系统上运行
+    runs-on: ubuntu-latest
+
+    # 定义SyncFork的变量
+    outputs:
+      MAIN_YML_FILES_INCONSISTENT: ${{ steps.compare_main_yml_files.outputs.MAIN_YML_FILES_INCONSISTENT }}
+
+    steps:
+      # 使用GitHub Actions提供的动作来检出代码库
+      - name: Checkout Repository
+        uses: actions/checkout@main
+
+      - name: Configure Git
+        run: |
+          # 配置Git用户信息
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Fetch upstream changes
+        run: |
+          # 添加上游仓库作为远程仓库，并获取上游仓库的main分支的最新更改
+          REPO_NAME="NianBroken/LotteryResult"
+          REPO_URL="https://github.com/$REPO_NAME.git"
+          echo "Repo Url: $REPO_URL"
+          git remote add upstream "$REPO_URL"
+          git fetch upstream main
+
+      - name: Compare main.yml files
+        id: compare_main_yml_files
+        run: |
+          # 比对当前分支的main.yml文件与上游分支的main.yml文件是否一致
+          if cmp -s .github/workflows/main.yml <(git show upstream/main:.github/workflows/main.yml); then
+            echo "MAIN_YML_FILES_INCONSISTENT=False" >> $GITHUB_OUTPUT
+            echo "main.yml file is consistent"
+          else
+            echo "MAIN_YML_FILES_INCONSISTENT=True" >> $GITHUB_OUTPUT
+            echo "main.yml file is inconsistent"
+            echo "::error title=main.yml file is inconsistent!" \
+            "::The content of the 'main.yml' file in the current branch" \
+            "does not match the content of the 'main.yml' file in the" \
+            "upstream branch! You need to synchronize the upstream branch" \
+            "manually! If you don't synchronize, there is a chance that" \
+            "your code will have an uncontrollable fatal bug!"
+          fi
+
+      - name: Set file extensions
+        run: |
+          # 定义备份和还原的文件后缀列表
+          echo "FILE_EXTENSIONS=.txt .yml" >> $GITHUB_ENV
+          # 以空格分隔多个文件后缀
+
+      - name: Backup local files with specified extensions
+        run: |
+          # 创建一个备份目录，并将当前目录及子目录中的所有指定后缀文件复制到备份目录，并保持路径
+          mkdir -p backup
+          for EXT in $FILE_EXTENSIONS; do
+            rsync -av --include="*/" --include="*$EXT" --exclude="*" ./ backup/
+          done
+
+      - name: List Backup Folder Structure
+        run: |
+          # 列出备份文件夹的文件夹结构
+          echo "Backup Folder Structure:"
+          tree -a backup/
+
+      - name: Force push changes from upstream to current main branch
+        run: |
+          # 将上游main分支的更改强制推送到当前main分支
+          git checkout main
+          git reset --hard upstream/main
+
+      - name: Restore local files with specified extensions and delete backup
+        run: |
+          # 从备份目录将指定后缀文件还原到当前目录及子目录中，然后删除备份目录
+          for EXT in $FILE_EXTENSIONS; do
+            rsync -av --include="*/" --include="*$EXT" --exclude="*" backup/ ./
+          done
+          rm -rf backup
+
+      - name: Force push changes to main branch
+        run: |
+          # 将更改强制推送到main分支
+          git add .
+          git commit -m "Update branch" || true
+          git push origin main --force
+
+  # 检查成绩
+  LotteryResult:
+    name: LotteryResult
+
+    # SyncFork执行完成后运行
+    needs: SyncFork
+
+    # 在最新版的Ubuntu系统上运行
+    runs-on: ubuntu-latest
+
+    steps:
+      # 使用GitHub Actions提供的动作来检出代码库
+      - name: Checkout Repository
+        uses: actions/checkout@main
+
+      # 配置Python环境
+      - name: Set up Python
+        uses: actions/setup-python@main
+        with:
+          python-version: '*'
+
+      - name: Install dependencies
+        run: |
+          # 使用pip安装项目的依赖项
+          pip install requests
+
+      - name: Configure Git
+        run: |
+          # 配置Git用户信息
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Run main program
+        env:
+          MAIN_YML_FILES_INCONSISTENT: ${{ needs.SyncFork.outputs.MAIN_YML_FILES_INCONSISTENT }}
+          AOMENURL: ${{ secrets.AOMENURL }}
+          TOKEN: ${{ secrets.TOKEN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_NAME: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_WORKFLOW: ${{ github.workflow }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          # 运行主程序
+          export BEIJING_TIME="$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S:%3N')"
+          python main.py
+          echo "------"
+
+          # 方便通过截图快速定位到用户
+          echo "main.yml Files Inconsistent: $MAIN_YML_FILES_INCONSISTENT"
+          echo "Triggered By: $GITHUB_EVENT_NAME"
+          echo "Run By: $GITHUB_TRIGGERING_ACTOR"
+          echo "Repository Name: $REPOSITORY_NAME"
+          echo "Commit SHA: $GITHUB_SHA"
+          echo "Workflow Name: $GITHUB_WORKFLOW"
+          echo "Workflow Number: $GITHUB_RUN_NUMBER"
+          echo "Workflow ID: $GITHUB_RUN_ID"
+          echo "Beijing Time: $BEIJING_TIME"
+
+      - name: Delete __pycache__ folder
+        run: |
+          # 删除__pycache__文件夹
+          rm -rf __pycache__
+
+      - name: Force push changes to main branch
+        run: |
+          # 将更改强制推送到main分支
+          git add .
+          git commit -m "Update from GitHub Actions" || true
+          git push origin main --force
