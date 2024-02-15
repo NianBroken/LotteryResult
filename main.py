@@ -6,6 +6,7 @@ import requests
 from pushplus import send_message
 
 aomen_url = os.environ.get("AOMENURL")
+token = os.environ.get("TOKEN")
 
 
 # MD5加密
@@ -17,7 +18,6 @@ aomen_file_path = "aomen.txt"
 old_aomen_file_path = "old_aomen.txt"
 aomen_output = ""
 run_log = ""
-token = "123456"
 
 aomen_response = requests.get(aomen_url)
 
