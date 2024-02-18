@@ -122,6 +122,11 @@ jobs:
         with:
           python-version: '*'
 
+      - name: Install dependencies
+        run: |
+          # 使用pip安装项目的依赖项
+          pip install requests
+
       - name: Configure Git
         run: |
           # 配置Git用户信息
