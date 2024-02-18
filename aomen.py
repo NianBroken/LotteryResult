@@ -4,8 +4,8 @@ import requests
 
 def get_aomen_lottery_output(aomen_url):
     try:
-        aomen_output = ""
         aomen_response = requests.get(aomen_url)
+        aomen_output = ""
         with open("color_mapping.json", "r", encoding="utf-8") as aomen_file:
             aomen_color_mapping = json.load(aomen_file)
         if aomen_response.status_code == 200:
