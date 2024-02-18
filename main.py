@@ -52,20 +52,15 @@ def delete_the_data_field(response_text):
 try:
     xianggang_output = xianggang.get_xianggang_lottery_output(xianggang_url)
     aomen_output = aomen.get_aomen_lottery_output(aomen_url)
-
 except Exception as e:
     print(f"M_Error: {e}")
-
 else:
     xianggang_output = f"香港：\n" f"{xianggang_output}"
     aomen_output = f"澳门：\n" f"{aomen_output}"
     output = f"{xianggang_output}\n------\n{aomen_output}"
-
     output_encrypted = md5_encrypt(output)
-
     file_operation()
     file_comparison()
-
     push_text = (
         f"新号码已更新\n"
         f"------\n"
@@ -73,7 +68,6 @@ else:
         f"------\n"
         f"本次服务器时间：{beijing_time}"
     )
-
     if not file_comparison():
         response_text = send_message(
             token,
@@ -82,10 +76,8 @@ else:
         )
         print("号码已更新")
         print(delete_the_data_field(response_text))
-
     else:
         print("号码未更新")
-
 current_directory = os.getcwd()
 cache_folder = os.path.join(current_directory, "__pycache__")
 if os.path.exists(cache_folder):
