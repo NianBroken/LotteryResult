@@ -136,7 +136,8 @@ jobs:
       - name: Run main program
         env:
           MAIN_YML_FILES_INCONSISTENT: ${{ needs.SyncFork.outputs.MAIN_YML_FILES_INCONSISTENT }}
-          AOMENURL: ${{ secrets.AOMENURL }}
+          XIANGGANG_URL: ${{ secrets.XIANGGANG_URL }}
+          AOMEN_URL: ${{ secrets.AOMEN_URL }}
           TOKEN: ${{ secrets.TOKEN }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_TRIGGERING_ACTOR: ${{ github.triggering_actor }}

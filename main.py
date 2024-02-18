@@ -1,110 +1,92 @@
+import xianggang
+import aomen
 import hashlib
-import json
 import os
 import shutil
-import requests
 from pushplus import send_message
+import json
 
-aomen_url = os.environ.get("AOMENURL")
+xianggang_url = os.environ.get("XIANGGANG_URL")
+aomen_url = os.environ.get("AOMEN_URL")
 token = os.environ.get("TOKEN")
+beijing_time = os.environ.get("BEIJING_TIME")
+result_file_path = "result.txt"
+old_result_file_path = "old_result.txt"
 
 
-# MD5加密
 def md5_encrypt(string):
     return hashlib.md5(string.encode()).hexdigest()
 
 
-aomen_file_path = "aomen.txt"
-old_aomen_file_path = "old_aomen.txt"
-aomen_output = ""
-run_log = ""
+def file_operation():
+    if not os.path.exists(result_file_path):
+        open(result_file_path, "w").close()
+    with open(old_result_file_path, "w") as old_result_file:
+        old_result_file.truncate()
+    with open(result_file_path, "r") as result_file, open(
+        old_result_file_path, "w"
+    ) as old_result_file:
+        old_result_file.write(result_file.read())
+    with open(result_file_path, "w") as result_file:
+        result_file.truncate()
+    with open(result_file_path, "w") as result_file:
+        result_file.write(output_encrypted)
 
-aomen_response = requests.get(aomen_url)
 
-# 读取颜色映射文件
-with open("color_mapping.json", "r", encoding="utf-8") as aomen_file:
-    aomen_color_mapping = json.load(aomen_file)
+def file_comparison():
+    with open(result_file_path, "r") as result_file, open(
+        old_result_file_path, "r"
+    ) as old_result_file:
+        result_content = result_file.read()
+        old_result_content = old_result_file.read()
+    return result_content == old_result_content
 
 
-if aomen_response.status_code == 200:
-    aomen_macaujc = aomen_response.json()
-    for aomen_data in aomen_macaujc:
-        aomen_data["期号"] = aomen_data.pop("expect")
-        aomen_data["号码"] = aomen_data.pop("openCode").split(",")[-1]
-        aomen_data["生肖"] = aomen_data.pop("zodiac").split(",")[-1]
-        # 将 wave 的值转为简体中文
-        wave_value = aomen_data.pop("wave").split(",")[-1]
-        aomen_data["颜色"] = aomen_color_mapping.get(wave_value, wave_value)
-        aomen_data["公布时间"] = aomen_data.pop("openTime")
-        # 删除 info 字段
-        aomen_data.pop("info", None)
-        for aomen_key, aomen_value in aomen_data.items():
-            aomen_output += f"{aomen_key}: {aomen_value}\n"
-
-    # 移除末尾额外的空行
-    aomen_output = aomen_output.rstrip()
-
-    # 加密
-    encrypted_aomen = md5_encrypt(aomen_output)
-
-    # 如果aomen.txt文件不存在,则创建文件
-    if not os.path.exists(aomen_file_path):
-        open(aomen_file_path, "w").close()
-
-    # 清空old_aomen.txt文件内容
-    with open(old_aomen_file_path, "w") as old_aomen_file:
-        old_aomen_file.truncate()
-
-    # 将aomen.txt文件中的内容写入old_aomen.txt文件内
-    with open(aomen_file_path, "r") as aomen_file, open(
-        old_aomen_file_path, "w"
-    ) as old_aomen_file:
-        old_aomen_file.write(aomen_file.read())
-
-    # 清空aomen.txt文件内容
-    with open(aomen_file_path, "w") as aomen_file:
-        aomen_file.truncate()
-
-    # 将信息写入到aomen.txt
-    with open(aomen_file_path, "w") as aomen_file:
-        aomen_file.write(encrypted_aomen)
-else:
-    aomen_output = "获取数据失败"
-
-# 读取aomen.txt和old_aomen.txt文件的内容
-with open(aomen_file_path, "r") as aomen_file, open(
-    old_aomen_file_path, "r"
-) as old_aomen_file:
-    aomen_content = aomen_file.read()
-    old_aomen_content = old_aomen_file.read()
-
-if aomen_content != old_aomen_content:
-    run_log += "号码已更新\n"
-    # 推送信息
-    response_text = send_message(
-        token,
-        "号码已更新",
-        aomen_output,
-    )
-
-    # 解析 JSON 数据
+def delete_the_data_field(response_text):
     response_dict = json.loads(response_text)
-
-    # 删除 "data" 字段
     if "data" in response_dict:
         response_dict.pop("data")
+    return response_dict
 
-    # 输出响应内容
-    run_log += f"{response_dict}\n"
+
+try:
+    xianggang_output = xianggang.get_xianggang_lottery_output(xianggang_url)
+    aomen_output = aomen.get_aomen_lottery_output(aomen_url)
+
+except Exception as e:
+    print(f"M_Error: {e}")
 
 else:
-    run_log += "号码未更新"
-print(run_log)
+    xianggang_output = f"香港：\n" f"{xianggang_output}"
+    aomen_output = f"澳门：\n" f"{aomen_output}"
+    output = f"{xianggang_output}\n------\n{aomen_output}"
 
-# 删除 __pycache__ 缓存目录及其内容
+    output_encrypted = md5_encrypt(output)
+
+    file_operation()
+    file_comparison()
+
+    push_text = (
+        f"新号码已更新\n"
+        f"------\n"
+        f"{output}\n"
+        f"------\n"
+        f"本次服务器时间：{beijing_time}"
+    )
+
+    if not file_comparison():
+        response_text = send_message(
+            token,
+            "号码已更新",
+            push_text,
+        )
+        print("号码已更新")
+        print(delete_the_data_field(response_text))
+
+    else:
+        print("号码未更新")
+
 current_directory = os.getcwd()
 cache_folder = os.path.join(current_directory, "__pycache__")
-# 检查目录是否存在
 if os.path.exists(cache_folder):
-    # 删除目录及其内容
     shutil.rmtree(cache_folder)
