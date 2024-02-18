@@ -21,7 +21,8 @@ def get_aomen_lottery_output(aomen_url):
                 for aomen_key, aomen_value in aomen_data.items():
                     aomen_output += f"{aomen_key}: {aomen_value}\n"
     except Exception as e:
-        return f"AM_Error: {e}"
+        return "获取失败"
+        print(f"AM_Error: {e}")
     else:
         aomen_output = aomen_output.rstrip()
         if not aomen_output:
