@@ -21,7 +21,8 @@ def get_xianggang_lottery_output(xianggang_url):
             xianggang_output += f"生肖: {xianggang_sheng_xiao}\n"
             xianggang_output += f"公布时间: {xianggang_lottery_time}\n"
     except Exception as e:
-        return f"XG_Error: {e}"
+        return "获取失败"
+        print(f"XG_Error: {e}")
     else:
         xianggang_output = xianggang_output.rstrip()
         if not xianggang_output:
