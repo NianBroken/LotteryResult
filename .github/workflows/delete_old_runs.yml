@@ -1,19 +1,24 @@
 # 工作流的名称
-name: LotteryResult
+name: DeleteOldRuns
 
 # 工作流运行的名称
-run-name: ${{ github.workflow }} ${{ github.sha }}
+run-name: DeleteOldRuns
 
 # 指定此工作流的触发器
 on:
   schedule:
-    - cron: "*/1 * * * *" # 每1分钟自动执行一次
+    - cron: "0 16 * * *" # 每天北京时间0点执行
   workflow_dispatch: # 可以手动执行
-
+    inputs:
+      hour_count:
+        description: "You want to delete records from how many hours ago?"
+        required: true
+        default: "168"
+        type: string
 jobs:
   # 检查成绩
-  LotteryResult:
-    name: LotteryResult
+  DeleteOldRuns:
+    name: DeleteOldRuns
 
     # 在最新版的Ubuntu系统上运行
     runs-on: ubuntu-latest
@@ -22,12 +27,6 @@ jobs:
       # 使用GitHub Actions提供的动作来检出代码库
       - name: Checkout Repository
         uses: actions/checkout@main
-
-      - name: Configure Git
-        run: |
-          # 配置Git用户信息
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
 
       # 配置Python环境
       - name: Set up Python
@@ -38,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: |
           # 使用pip安装项目的依赖项
-          pip install requests opencc pytz
+          pip install requests
 
       - name: Get Connection
         run: |
@@ -50,7 +49,9 @@ jobs:
       - name: Run main program
         id: run_main_program
         env:
-          PUSH_TOKEN: ${{ secrets.PUSH_TOKEN }}
+          HOUR_COUNT: ${{ github.event.inputs.hour_count }}
+          GITHUB_ACTIONS: ${{github.actions}}
+          GITHUB_TOKEN: ${{ secrets.GHTOKEN }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           REPOSITORY_NAME: ${{ github.repository }}
@@ -62,10 +63,34 @@ jobs:
           # 运行主程序
           export BEIJING_TIME="$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S:%3N')"
           echo "BEIJING_TIME=$BEIJING_TIME" >> $GITHUB_OUTPUT
-          python main.py
-          echo "------"
+
+          # 如果 hour_count 为空，则设置为 168
+          if [[ -z "${{ github.event.inputs.hour_count }}" ]]; then
+            # 设置步骤输出的 hour_count 为 168
+            export HOUR_COUNT="168"
+          # 如果 hour_count 不是正整数，则设置为 168
+          elif ! [[ "${{ github.event.inputs.hour_count }}" =~ ^[0-9]+$ ]]; then
+            # 设置步骤输出的 hour_count 为 168
+            export HOUR_COUNT="168"
+          # 如果 hour_count 是负数，则设置为 168
+          elif [[ "${{ github.event.inputs.hour_count }}" -lt 0 ]]; then
+            # 设置步骤输出的 hour_count 为 168
+            export HOUR_COUNT="168"
+          # 否则，使用输入的 hour_count
+          else
+            # 设置步骤输出的 hour_count 为输入的值
+            export HOUR_COUNT="${{ github.event.inputs.hour_count }}"
+          fi
+
+          if [ -n "$GITHUB_TOKEN" ]; then
+            python delete_old_runs.py
+            echo "------"
+          else
+            exit 0
+          fi
 
           # 方便通过截图快速定位到用户
+          echo "Hour Count: $HOUR_COUNT"
           echo "Triggered By: $GITHUB_EVENT_NAME"
           echo "Run By: $GITHUB_TRIGGERING_ACTOR"
           echo "Repository Name: $REPOSITORY_NAME"
@@ -79,11 +104,3 @@ jobs:
         run: |
           # 删除__pycache__文件夹
           rm -rf __pycache__
-          rm -rf scripts/__pycache__
-
-      - name: Force push changes to main branch
-        run: |
-          # 将更改强制推送到main分支
-          git add .
-          git commit -m "Update from GitHub Actions" || true
-          git push origin main --force
